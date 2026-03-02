@@ -1,28 +1,9 @@
- // src/index.js
 import express from "express";
 import fetch from "node-fetch";
 import dotenv from "dotenv";
-import path from "path";
-import { fileURLToPath } from "url";
 
-/* ======================
-   LOAD ENV
-====================== */
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+dotenv.config();
 
-dotenv.config({ path: path.resolve(__dirname, "../.env") });
-
-console.log("ENV CHECK:", {
-  env: process.env.WAAFIPAY_ENV,
-  merchant: process.env.WAAFIPAY_MERCHANT_UID,
-  userId: process.env.WAAFIPAY_API_USER_ID,
-  key: process.env.WAAFIPAY_API_KEY,
-});
-
-/* ======================
-   EXPRESS APP
-====================== */
 const app = express();
 app.use(express.json());
 
@@ -32,8 +13,13 @@ app.use(express.json());
 function normalizeSomaliPhone(phone) {
   let cleaned = phone.replace(/[^\d]/g, "");
 
-  if (cleaned.startsWith("0")) cleaned = "252" + cleaned.slice(1);
-  if (cleaned.startsWith("252252")) cleaned = cleaned.slice(3);
+  if (cleaned.startsWith("0")) {
+    cleaned = "252" + cleaned.slice(1);
+  }
+
+  if (cleaned.startsWith("252252")) {
+    cleaned = cleaned.slice(3);
+  }
 
   return cleaned;
 }
@@ -43,6 +29,13 @@ function isValidSomaliPhone(phone) {
 }
 
 /* ======================
+   HEALTH CHECK
+====================== */
+app.get("/health", (req, res) => {
+  res.send("✅ WaafiPay backend is alive");
+});
+
+/* ======================
    WAAFIPAY CONFIRM
 ====================== */
 app.post("/waafipay/confirm", async (req, res) => {
@@ -50,12 +43,19 @@ app.post("/waafipay/confirm", async (req, res) => {
     let { phone, total, district, items } = req.body;
 
     if (!phone || !total || !district || !items?.length) {
-      return res.status(400).json({ status: "ERROR", message: "Missing fields" });
+      return res.status(400).json({
+        status: "ERROR",
+        message: "Missing fields",
+      });
     }
 
     phone = normalizeSomaliPhone(phone);
+
     if (!isValidSomaliPhone(phone)) {
-      return res.status(400).json({ status: "ERROR", message: "Invalid Somali phone" });
+      return res.status(400).json({
+        status: "ERROR",
+        message: "Invalid Somali phone",
+      });
     }
 
     const {
@@ -65,8 +65,15 @@ app.post("/waafipay/confirm", async (req, res) => {
       WAAFIPAY_API_KEY,
     } = process.env;
 
-    if (!WAAFIPAY_MERCHANT_UID || !WAAFIPAY_API_USER_ID || !WAAFIPAY_API_KEY) {
-      return res.status(500).json({ status: "ERROR", message: "Missing WaafiPay ENV" });
+    if (
+      !WAAFIPAY_MERCHANT_UID ||
+      !WAAFIPAY_API_USER_ID ||
+      !WAAFIPAY_API_KEY
+    ) {
+      return res.status(500).json({
+        status: "ERROR",
+        message: "Missing WaafiPay ENV",
+      });
     }
 
     const payload = {
@@ -80,13 +87,15 @@ app.post("/waafipay/confirm", async (req, res) => {
         apiUserId: WAAFIPAY_API_USER_ID,
         apiKey: WAAFIPAY_API_KEY,
         paymentMethod: "MWALLET_ACCOUNT",
-        payerInfo: { accountNo: phone },
+        payerInfo: {
+          accountNo: phone,
+        },
         transactionInfo: {
           referenceId: `ORDER-${Date.now()}`,
           invoiceId: `INV-${Date.now()}`,
           amount: total,
           currency: "USD",
-          description: `Payment for ${district} order`,
+          description: "Vitmiin Order Payment",
           items: items.map((i) => ({
             itemId: i.id,
             description: i.title,
@@ -104,31 +113,56 @@ app.post("/waafipay/confirm", async (req, res) => {
 
     const response = await fetch(waafiUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
       body: JSON.stringify(payload),
     });
 
     const result = await response.json();
-    console.log("WaafiPay Response:", result);
+    console.log("WaafiPay:", result);
 
     if (result.responseCode !== "2001") {
       if (WAAFIPAY_ENV !== "live") {
-        return res.json({ status: "SUCCESS", simulated: true });
+        return res.json({
+          status: "SUCCESS",
+          simulated: true,
+        });
       }
-      return res.status(400).json({ status: "ERROR", message: result.responseMsg });
+
+      return res.status(400).json({
+        status: "ERROR",
+        message: result.responseMsg,
+      });
     }
 
-    return res.json({ status: "SUCCESS", waafipay: result });
+    return res.json({
+      status: "SUCCESS",
+      waafipay: result,
+    });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ status: "ERROR", message: "Server error" });
+    return res.status(500).json({
+      status: "ERROR",
+      message: "Server error",
+    });
   }
 });
 
 /* ======================
-   START SERVER
+   SERVER START
 ====================== */
 const PORT = process.env.PORT || 3000;
+
+// log ENV safely
+console.log("ENV CHECK:", {
+  env: process.env.WAAFIPAY_ENV,
+  merchant: process.env.WAAFIPAY_MERCHANT_UID,
+  userId: process.env.WAAFIPAY_API_USER_ID,
+  key: process.env.WAAFIPAY_API_KEY ? "SET" : "MISSING",
+});
+
 app.listen(PORT, () => {
   console.log(`🚀 WaafiPay backend running on port ${PORT}`);
 });
