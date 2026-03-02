@@ -1,15 +1,26 @@
+ // src/index.js
 import express from "express";
 import fetch from "node-fetch";
 import dotenv from "dotenv";
+import cors from "cors";
 
 dotenv.config();
 
 const app = express();
 app.use(express.json());
 
-/* ======================
-   PHONE NORMALIZER
-====================== */
+// ======================
+// ENABLE CORS
+// ======================
+// Allow only your Netlify frontend
+app.use(cors({
+  origin: "https://vitimiinonline.netlify.app", // Replace with your frontend URL
+  methods: ["GET", "POST", "OPTIONS"],
+}));
+
+// ======================
+// PHONE NORMALIZER
+// ======================
 function normalizeSomaliPhone(phone) {
   let cleaned = phone.replace(/[^\d]/g, "");
 
@@ -28,16 +39,23 @@ function isValidSomaliPhone(phone) {
   return /^252\d{9}$/.test(phone);
 }
 
-/* ======================
-   HEALTH CHECK
-====================== */
+// ======================
+// ROOT ROUTE (Optional)
+// ======================
+app.get("/", (req, res) => {
+  res.send("✅ Vitmiin WaafiPay backend is running. Use /waafipay/confirm for payments.");
+});
+
+// ======================
+// HEALTH CHECK
+// ======================
 app.get("/health", (req, res) => {
   res.send("✅ WaafiPay backend is alive");
 });
 
-/* ======================
-   WAAFIPAY CONFIRM
-====================== */
+// ======================
+// WAAFIPAY CONFIRM
+// ======================
 app.post("/waafipay/confirm", async (req, res) => {
   try {
     let { phone, total, district, items } = req.body;
@@ -76,6 +94,9 @@ app.post("/waafipay/confirm", async (req, res) => {
       });
     }
 
+    // ======================
+    // WAAFIPAY PAYLOAD
+    // ======================
     const payload = {
       schemaVersion: "1.0",
       requestId: Date.now().toString(),
@@ -150,12 +171,12 @@ app.post("/waafipay/confirm", async (req, res) => {
   }
 });
 
-/* ======================
-   SERVER START
-====================== */
+// ======================
+// SERVER START
+// ======================
 const PORT = process.env.PORT || 3000;
 
-// log ENV safely
+// Log ENV safely
 console.log("ENV CHECK:", {
   env: process.env.WAAFIPAY_ENV,
   merchant: process.env.WAAFIPAY_MERCHANT_UID,
